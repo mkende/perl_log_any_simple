@@ -28,3 +28,6 @@ on 'develop' => sub {
 };
 
 # End of the template. You can add custom content below this line.
+
+requires 'Log::Any';
+requires 'Readonly'

@@ -57,3 +57,8 @@ minimum_regex_length_to_complain_about = 30
 [-RegularExpressions::RequireLineBoundaryMatching]
 
 # End of the template. You can add custom content below this line.
+
+# We are using %^H all the time (which does not have an English equivalent) and
+# we specifically don’t want to localize it.
+[-Variables::ProhibitPunctuationVars]
+[-Variables::RequireLocalizedPunctuationVars]
