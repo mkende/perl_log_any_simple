@@ -31,4 +31,11 @@ use Log::Any qw($log);
   $::log->clear();
 }
 
+{
+  use Log::Any::Simple ':default', ':die_at' => 'info';
+  like(dies { info('foo %s baz', 'bar') }, qr/foo bar baz/, 'dies at info');
+  is($log->msgs(), [{category => 'main', level => 'info', message => 'foo bar baz'}], 'log info with die_at');
+  $log->clear();
+}
+
 done_testing;

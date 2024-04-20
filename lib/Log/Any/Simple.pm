@@ -21,16 +21,21 @@ Readonly::Hash my %ALL_LOG_METHODS => map { $_ => 1 } @ALL_LOG_METHODS;
 
 Readonly::Array my @DEFAULT_LOG_METHODS => qw(trace debug info warn error fatal);
 
+# The index of the %^H hash in the list returned by "caller".
+Readonly::Scalar my $HINT_HASH => 10;
+
 sub import {  ## no critic (RequireArgUnpacking)
-  my (undef) = shift @_;  # This is the package being imported, so myself.
+  my (undef) = shift @_;  # This is the package being imported, so ourself.
+
+  my %to_export;
 
   while (defined (my $arg = shift)) {
     if ($arg eq ':default') {  ## no critic (ProhibitCascadingIfElse)
-      _export($_) for @DEFAULT_LOG_METHODS;
+      $to_export{$_} = 1 for @DEFAULT_LOG_METHODS;
     } elsif ($arg eq ':all') {
-      _export($_) for @ALL_LOG_METHODS;
+      $to_export{$_} = 1 for @ALL_LOG_METHODS;
     } elsif (exists $ALL_LOG_METHODS{$arg}) {
-      _export($arg);
+      $to_export{$arg} = 1;
     } elsif ($arg eq ':die_at') {
       my $die_at = numeric_level(shift);
       croak 'Invalid :die_at level' unless defined $die_at;
@@ -44,6 +49,10 @@ sub import {  ## no critic (RequireArgUnpacking)
     }
   }
 
+  # We export all the methods at the end, so that all the modifications to the
+  # %^H hash are already done and can be used by the _export method.
+  _export($_) for keys %to_export;
+
   @_ = 'Log::Any';
   goto &Log::Any::import;
 }
@@ -51,31 +60,43 @@ sub import {  ## no critic (RequireArgUnpacking)
 sub _export {
   my ($method) = @_;
   my $call_pkg = caller(1);
+
+  my $logger = _get_logger($call_pkg, \%^H);
+  my $log_method = $method.'f';
+  my $sub;
+  if (_should_die($method, \%^H)) {
+    $sub = sub { croak($logger->$log_method(@_)) };
+  } else {
+    $sub = sub { $logger->$log_method(@_); return };
+  }
   no strict 'refs';  ## no critic (ProhibitNoStrict)
-                     # TODO: actually generates methods, with the right logger, etc., so that they
-                     # are faster.
-  *{"${call_pkg}::${method}"} = \&{$method};
+  *{"${call_pkg}::${method}"} = $sub;
   return;
 }
 
-Readonly::Scalar my $HINT_HASH => 10;
+sub _get_logger {
+  my ($pkg_name, $hint_hash) = @_;
+  return Log::Any->get_logger(category => ($hint_hash->{$CATEGORY_KEY} // $pkg_name));
+}
 
-# This blocks generates in the Log::Any::Functions namespace logging methods
+sub _should_die {
+  my ($level, $hint_hash) = @_;
+  return numeric_level($level) <= ($hint_hash->{$DIE_AT_KEY} // $DIE_AT_DEFAULT);
+}
+
+# This blocks generates in the Log::Any::Simple namespace logging methods
 # that can be called directly by the user (although the standard approach would
 # be to import them in the caller’s namespace). These methods are slower because
 # They need to retrieve a logger each time.
-foreach my $name (logging_methods()) {
+for my $name (logging_methods()) {
   no strict 'refs';  ## no critic (ProhibitNoStrict)
   *{$name} = sub {
     my @caller = caller(0);
-    my $logger =
-        Log::Any->get_logger(category => ($caller[$HINT_HASH]{$CATEGORY_KEY} // $caller[0]));
+    my $hint_hash = $caller[$HINT_HASH];
+    my $logger = _get_logger($caller[0], $hint_hash);
     my $method = $name.'f';
     my $msg = $logger->$method(@_);
-    my $pkg_hash = (caller())[$HINT_HASH];
-    if (numeric_level($name) <= ($caller[$HINT_HASH]{$DIE_AT_KEY} // $DIE_AT_DEFAULT)) {
-      croak $msg;
-    }
+    croak $msg if _should_die($name, $hint_hash);
   };
 }
 
