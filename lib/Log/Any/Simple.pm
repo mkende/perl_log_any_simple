@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use utf8;
 
-use Carp;
+use Carp qw(croak shortmess longmess);
 use Log::Any;
 use Log::Any::Adapter::Util 'logging_methods', 'numeric_level';
 use Readonly;
@@ -23,6 +23,11 @@ Readonly::Array my @DEFAULT_LOG_METHODS => qw(trace debug info warn error fatal)
 
 # The index of the %^H hash in the list returned by "caller".
 Readonly::Scalar my $HINT_HASH => 10;
+
+# This is sligthly ugly but the intent is that the user of a module using this
+# module will set this variable to 1 to get full backtrace. 
+our $DIE_WITH_FULL_STACK_TRACE;
+our %DIE_WITH_FULL_STACK_TRACE;
 
 sub import {  ## no critic (RequireArgUnpacking)
   my (undef) = shift @_;  # This is the package being imported, so ourself.
@@ -61,11 +66,12 @@ sub _export {
   my ($method) = @_;
   my $call_pkg = caller(1);
 
-  my $logger = _get_logger($call_pkg, \%^H);
+  my $category = _get_category($call_pkg, \%^H);
+  my $logger = _get_logger($category);
   my $log_method = $method.'f';
   my $sub;
   if (_should_die($method, \%^H)) {
-    $sub = sub { croak($logger->$log_method(@_)) };
+    $sub = sub { _die($category, $logger->$log_method(@_)) };
   } else {
     $sub = sub { $logger->$log_method(@_); return };
   }
@@ -74,14 +80,28 @@ sub _export {
   return;
 }
 
-sub _get_logger {
+sub _get_category {
   my ($pkg_name, $hint_hash) = @_;
-  return Log::Any->get_logger(category => ($hint_hash->{$CATEGORY_KEY} // $pkg_name));
+  return $hint_hash->{$CATEGORY_KEY} // $pkg_name;
+}
+
+sub _get_logger {
+  my ($category) = @_;
+  return Log::Any->get_logger(category => $category);
 }
 
 sub _should_die {
   my ($level, $hint_hash) = @_;
   return numeric_level($level) <= ($hint_hash->{$DIE_AT_KEY} // $DIE_AT_DEFAULT);
+}
+
+# This method is meant to be called only at logging time (and not at import time
+# like the methods above)
+sub _die {
+  my ($category, $msg) = @_;
+  my $full_trace = $DIE_WITH_FULL_STACK_TRACE || $DIE_WITH_FULL_STACK_TRACE{$category};
+  my $die_msg = $full_trace ? longmess($msg) : shortmess($msg);
+  die $die_msg;
 }
 
 # This blocks generates in the Log::Any::Simple namespace logging methods
@@ -93,10 +113,11 @@ for my $name (logging_methods()) {
   *{$name} = sub {
     my @caller = caller(0);
     my $hint_hash = $caller[$HINT_HASH];
-    my $logger = _get_logger($caller[0], $hint_hash);
+    my $category = _get_category($caller[0], $hint_hash);
+    my $logger = _get_logger($category);
     my $method = $name.'f';
     my $msg = $logger->$method(@_);
-    croak $msg if _should_die($name, $hint_hash);
+    _die($category, $msg) if _should_die($name, $hint_hash);
   };
 }
 
