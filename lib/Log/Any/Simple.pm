@@ -1,4 +1,4 @@
-package Log::Any::Functions;
+package Log::Any::Simple;
 
 use strict;
 use warnings;
@@ -12,8 +12,8 @@ use Readonly;
 our $VERSION = '0.01';
 
 Readonly::Scalar my $DIE_AT_DEFAULT => numeric_level('fatal');
-Readonly::Scalar my $DIE_AT_KEY => 'Log::Any::Functions/die_at';
-Readonly::Scalar my $CATEGORY_KEY => 'Log::Any::Functions/category';
+Readonly::Scalar my $DIE_AT_KEY => 'Log::Any::Simple/die_at';
+Readonly::Scalar my $CATEGORY_KEY => 'Log::Any::Simple/category';
 
 Readonly::Array my @ALL_LOG_METHODS =>
     (Log::Any::Adapter::Util::logging_methods(), Log::Any::Adapter::Util::logging_aliases);

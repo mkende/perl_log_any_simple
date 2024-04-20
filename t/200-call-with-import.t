@@ -4,7 +4,7 @@ use Log::Any qw($log);
 
 {
   package MyTest1;
-  use Log::Any::Functions ':default';
+  use Log::Any::Simple ':default';
   info('foo %s baz', 'bar');
   ::is($::log->msgs(), [{category => 'MyTest1', level => 'info', message => 'foo bar baz'}], 'log info default import');
   ::imported_ok(qw(trace debug info warn error fatal));
@@ -14,7 +14,7 @@ use Log::Any qw($log);
 
 {
   package MyTest2;
-  use Log::Any::Functions ':all';
+  use Log::Any::Simple ':all';
   info('foo %s baz', 'bar');
   ::is($::log->msgs(), [{category => 'MyTest2', level => 'info', message => 'foo bar baz'}], 'log info default import');
   ::imported_ok(qw(trace debug info warn error fatal));
@@ -24,7 +24,7 @@ use Log::Any qw($log);
 
 {
   package MyTest3;
-  use Log::Any::Functions 'debug', 'crit';
+  use Log::Any::Simple 'debug', 'crit';
   ::imported_ok(qw(debug crit));
   ::not_imported_ok(qw(trace info warn error fatal));
   ::not_imported_ok(qw(inform warning err critical alert emergency));

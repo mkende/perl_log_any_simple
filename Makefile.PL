@@ -9,10 +9,10 @@ use warnings;
 use ExtUtils::MakeMaker::CPANfile;
 
 WriteMakefile(
-    NAME             => 'Log::Any::Functions',
-    DISTNAME         => 'Log-Any-Functions',
+    NAME             => 'Log::Any::Simple',
+    DISTNAME         => 'Log-Any-Simple',
     AUTHOR           => q{Mathias Kende <mathias@cpan.org>},
-    VERSION_FROM     => 'lib/Log/Any/Functions.pm',
+    VERSION_FROM     => 'lib/Log/Any/Simple.pm',
     ABSTRACT         => q{A very thin wrapper around Log::Any, using a functional interface that dies automatically when you log above a given level.},
     LICENSE          => 'mit',
     MIN_PERL_VERSION => '5.022',
@@ -33,16 +33,16 @@ WriteMakefile(
       resources => {
         repository => {
           type => 'git',
-          url => 'git@github.com:mkende/perl_log_any_functions.git',
-          web => 'https://github.com/mkende/perl_log_any_functions',
+          url => 'git@github.com:mkende/perl_log_any_simple.git',
+          web => 'https://github.com/mkende/perl_log_any_simple',
         },
         bugtracker => {
-          web => 'https://github.com/mkende/perl_log_any_functions/issues',
+          web => 'https://github.com/mkende/perl_log_any_simple/issues',
         },
       },
     },
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => '.gz', },
-    clean => { FILES => 'Log-Any-Functions-*' },
+    clean => { FILES => 'Log-Any-Simple-*' },
 );
 
 sub MY::postamble {
