@@ -24,13 +24,13 @@ Readonly::Array my @DEFAULT_LOG_METHODS => qw(trace debug info warn error fatal)
 # The index of the %^H hash in the list returned by "caller".
 Readonly::Scalar my $HINT_HASH => 10;
 
-# This is sligthly ugly but the intent is that the user of a module using this
-# module will set this variable to 1 to get full backtrace. 
+# This is slightly ugly but the intent is that the user of a module using this
+# module will set this variable to 1 to get full backtrace.
 our $DIE_WITH_FULL_STACK_TRACE;
 our %DIE_WITH_FULL_STACK_TRACE;
 
 sub import {  ## no critic (RequireArgUnpacking)
-  my (undef) = shift @_;  # This is the package being imported, so ourself.
+  my (undef) = shift @_;  # This is the package being imported, so our self.
 
   my %to_export;
 
@@ -101,7 +101,9 @@ sub _die {
   my ($category, $msg) = @_;
   my $full_trace = $DIE_WITH_FULL_STACK_TRACE || $DIE_WITH_FULL_STACK_TRACE{$category};
   my $die_msg = $full_trace ? longmess($msg) : shortmess($msg);
-  die $die_msg;
+  # The message returned by shortmess and longmess always end with a new line,
+  # so it’s fine to use die here.
+  die $die_msg;  ## no critic (ErrorHandling::RequireCarping)
 }
 
 # This blocks generates in the Log::Any::Simple namespace logging methods
