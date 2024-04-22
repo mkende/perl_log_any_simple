@@ -5,6 +5,7 @@ use warnings;
 use utf8;
 
 use Carp qw(croak shortmess longmess);
+use Data::Dumper;
 use Log::Any;
 use Log::Any::Adapter::Util 'logging_methods', 'numeric_level';
 use Readonly;
@@ -14,6 +15,8 @@ our $VERSION = '0.01';
 Readonly::Scalar my $DIE_AT_DEFAULT => numeric_level('fatal');
 Readonly::Scalar my $DIE_AT_KEY => 'Log::Any::Simple/die_at';
 Readonly::Scalar my $CATEGORY_KEY => 'Log::Any::Simple/category';
+Readonly::Scalar my $PREFIX_KEY => 'Log::Any::Simple/prefix';
+Readonly::Scalar my $DUMP_KEY => 'Log::Any::Simple/dump';
 
 Readonly::Array my @ALL_LOG_METHODS =>
     (Log::Any::Adapter::Util::logging_methods(), Log::Any::Adapter::Util::logging_aliases);
@@ -49,6 +52,14 @@ sub import {  ## no critic (RequireArgUnpacking)
       my $category = shift;
       croak 'Invalid :category name' unless $category;
       $^H{$CATEGORY_KEY} = $category;
+    } elsif ($arg eq ':prefix') {
+      my $prefix = shift;
+      croak 'Invalid :prefix value' unless $prefix;
+      $^H{$PREFIX_KEY} = $prefix;
+    } elsif ($arg eq ':dump_long') {
+      $^H{$DUMP_KEY} = 'long';
+    } elsif ($arg eq ':dump_short') {
+      $^H{$DUMP_KEY} = 'short';
     } else {
       croak "Unknown parameter: $arg";
     }
@@ -65,12 +76,13 @@ sub import {  ## no critic (RequireArgUnpacking)
 sub _export {
   my ($method) = @_;
   my $call_pkg = caller(1);
+  my $hint_hash = \%^H;
 
-  my $category = _get_category($call_pkg, \%^H);
-  my $logger = _get_logger($category);
+  my $category = _get_category($call_pkg, $hint_hash);
+  my $logger = _get_logger($category, $hint_hash);
   my $log_method = $method.'f';
   my $sub;
-  if (_should_die($method, \%^H)) {
+  if (_should_die($method, $hint_hash)) {
     $sub = sub { _die($category, $logger->$log_method(@_)) };
   } else {
     $sub = sub { $logger->$log_method(@_); return };
@@ -85,9 +97,27 @@ sub _get_category {
   return $hint_hash->{$CATEGORY_KEY} // $pkg_name;
 }
 
+sub _get_formatter {
+  my ($hint_hash) = @_;
+  my $dump = ($hint_hash->{$DUMP_KEY} // 'short') eq 'short' ? \&_dump_short : \&_dump_long;
+  return sub {
+    my (undef, undef, $format, @args) = @_;  # First two args are the category and the numeric level.
+    for (@args) {
+      $_ = $_->() if ref eq 'CODE';
+      $_ = '<undef>' unless defined;
+      next unless ref;
+      $_ = $dump->($_);
+    }
+    return sprintf($format, @args);
+  };
+}
+
 sub _get_logger {
-  my ($category) = @_;
-  return Log::Any->get_logger(category => $category);
+  my ($category, $hint_hash) = @_;
+  my @args = (category => $category);
+  push @args, prefix => $hint_hash->{$PREFIX_KEY} if exists $hint_hash->{$PREFIX_KEY};
+  push @args, formatter => _get_formatter($hint_hash);
+  return Log::Any->get_logger(@args);
 }
 
 sub _should_die {
@@ -106,6 +136,30 @@ sub _die {
   die $die_msg;  ## no critic (ErrorHandling::RequireCarping)
 }
 
+sub _dump_short {
+  my ($ref) = @_;  # Can be called on anything but intended to be called on ref.
+  local $Data::Dumper::Indent = 0;
+  local $Data::Dumper::Pad = '';
+  local $Data::Dumper::Terse = 1;
+  local $Data::Dumper::Sortkeys = 1;
+  local $Data::Dumper::Sparseseen = 1;
+  local $Data::Dumper::Quotekeys = 0;
+  # Consider Useqq = 1
+  return Dumper($ref);  
+}
+
+sub _dump_long {
+  my ($ref) = @_;  # Can be called on anything but intended to be called on ref.
+  local $Data::Dumper::Indent = 2;
+  local $Data::Dumper::Pad = '    ';
+  local $Data::Dumper::Terse = 1;
+  local $Data::Dumper::Sortkeys = 1;
+  local $Data::Dumper::Sparseseen = 1;
+  local $Data::Dumper::Quotekeys = 0;
+  # Consider Useqq = 1
+  return Dumper($ref);  
+}
+
 # This blocks generates in the Log::Any::Simple namespace logging methods
 # that can be called directly by the user (although the standard approach would
 # be to import them in the caller’s namespace). These methods are slower because
@@ -116,7 +170,7 @@ for my $name (logging_methods()) {
     my @caller = caller(0);
     my $hint_hash = $caller[$HINT_HASH];
     my $category = _get_category($caller[0], $hint_hash);
-    my $logger = _get_logger($category);
+    my $logger = _get_logger($category, $hint_hash);
     my $method = $name.'f';
     my $msg = $logger->$method(@_);
     _die($category, $msg) if _should_die($name, $hint_hash);
@@ -126,11 +180,42 @@ for my $name (logging_methods()) {
 1;
 
 __END__
- 
-    my $dumper = sub {
-        my ($value) = @_;
- 
-        return Data::Dumper->new( [$value] )->Indent(0)->Sortkeys(1)->Quotekeys(0)
-        ->Terse(1)->Useqq(1)->Dump();
-    };
- 
+
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Log::Any::Simple
+
+=head1 SYNOPSIS
+
+=head1 DESCRIPTION
+
+Feature
+
+=over 4
+
+=item *
+
+Purely functional interface with no object to manipulate.
+
+=item *
+
+Supports dying directly from call to the log function, so that the application
+can control the amount of logging produced by dying.
+
+=item *
+
+Support for lazy logged data
+
+=back
+
+=head2 Importing
+
+=head2 Logging
+
+=head1 VARIABLES
+
+=cut
