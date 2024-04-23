@@ -7,8 +7,9 @@ use utf8;
 use Carp qw(croak cluck shortmess longmess);
 use Data::Dumper;
 use Log::Any;
-use Log::Any::Adapter::Util 'logging_methods', 'numeric_level';
+use Log::Any::Adapter::Util 'numeric_level';
 use Readonly;
+use Sub::Util 'set_subname';
 
 our $VERSION = '0.01';
 
@@ -22,14 +23,20 @@ Readonly::Array my @ALL_LOG_METHODS =>
     (Log::Any::Adapter::Util::logging_methods(), Log::Any::Adapter::Util::logging_aliases);
 Readonly::Hash my %ALL_LOG_METHODS => map { $_ => 1 } @ALL_LOG_METHODS;
 
-Readonly::Array my @DEFAULT_LOG_METHODS => qw(trace debug info warn error fatal);
+Readonly::Array my @DEFAULT_LOG_METHODS => qw(trace debug info warning error fatal);
 
 # The index of the %^H hash in the list returned by "caller".
 Readonly::Scalar my $HINT_HASH => 10;
 
-sub import {  ## no critic (RequireArgUnpacking)
+# All our methods that can be imported, other than the logging methods
+# themselves.
+Readonly::Array my @EXPORT_OK => qw(die_with_stack_trace get_logger);
+Readonly::Hash my %EXPORT_OK => map { $_ => 1 } @EXPORT_OK;
+
+sub import {  ## no critic (RequireArgUnpacking, ProhibitExcessComplexity)
   my (undef) = shift @_;  # This is the package being imported, so our self.
 
+  my $calling_pkg_name = caller(0);
   my %to_export;
 
   while (defined (my $arg = shift)) {
@@ -40,9 +47,14 @@ sub import {  ## no critic (RequireArgUnpacking)
     } elsif (exists $ALL_LOG_METHODS{$arg}) {
       $to_export{$arg} = 1;
     } elsif ($arg eq ':die_at') {
-      my $die_at = numeric_level(shift);
-      croak 'Invalid :die_at level' unless defined $die_at;
-      $^H{$DIE_AT_KEY} = $die_at;
+      my $level = shift;
+      if ($level eq 'none') {
+        $^H{$DIE_AT_KEY} = numeric_level('emergency') - 1;
+      } else {
+        my $die_at = numeric_level($level);
+        croak 'Invalid :die_at level' unless defined $die_at;
+        $^H{$DIE_AT_KEY} = $die_at;
+      }
     } elsif ($arg eq ':category') {
       my $category = shift;
       croak 'Invalid :category name' unless $category;
@@ -55,6 +67,8 @@ sub import {  ## no critic (RequireArgUnpacking)
       $^H{$DUMP_KEY} = 'long';
     } elsif ($arg eq ':dump_short') {
       $^H{$DUMP_KEY} = 'short';
+    } elsif (exists $EXPORT_OK{$arg}) {
+      _export_module_method($arg, $calling_pkg_name);
     } else {
       croak "Unknown parameter: $arg";
     }
@@ -62,9 +76,8 @@ sub import {  ## no critic (RequireArgUnpacking)
 
   # We export all the methods at the end, so that all the modifications to the
   # %^H hash are already done and can be used by the _export method.
-  my $pkg_name = caller(0);
-  _export_logger($pkg_name, \%^H) if %to_export;
-  _export($_, $pkg_name, \%^H) for keys %to_export;
+  _export_logger($calling_pkg_name, \%^H) if %to_export;
+  _export_logging_method($_, $calling_pkg_name, \%^H) for keys %to_export;
 
   @_ = 'Log::Any';
   goto &Log::Any::import;
@@ -106,7 +119,17 @@ sub _export_logger {
   return;
 }
 
-sub _export {
+# Export one of the methods of this module to our caller. Should only be called
+# on methods from the @EXPORT_OK array.
+sub _export_module_method {
+  my ($method, $pkg_name) = @_;
+  no strict 'refs';  ## no critic (ProhibitNoStrict)
+  *{"${pkg_name}::${method}"} = \&{$method};
+  return;
+}
+
+# Export one of the logging methods of Log::Any to our caller.
+sub _export_logging_method {
   my ($method, $pkg_name, $hint_hash) = @_;
 
   my $log_method = $method.'f';
@@ -127,7 +150,7 @@ sub _export {
     };
   }
   no strict 'refs';  ## no critic (ProhibitNoStrict)
-  *{"${pkg_name}::${method}"} = $sub;
+  *{"${pkg_name}::${method}"} = set_subname($method, $sub);
   return;
 }
 
@@ -168,7 +191,7 @@ sub _should_die {
 # like the methods above)
 sub _die {
   my ($category, $msg) = @_;
-  my $trace = $die_with_stack_trace // $die_with_stack_trace{$category} // 'short';
+  my $trace = $die_with_stack_trace{$category} // $die_with_stack_trace // 'short';
   if ($trace eq 'long' || $trace eq 'full') {
     $msg = longmess($msg);
   } elsif ($trace eq 'short' || $trace eq 'small') {
@@ -225,20 +248,28 @@ sub _get_singleton_logger {
   return $logger;
 }
 
+# Public alias for _get_singleton_logger
+sub get_logger {
+  my @caller = caller(0);
+  return _get_singleton_logger($caller[0], $caller[$HINT_HASH]);
+}
+
 # This blocks generates in the Log::Any::Simple namespace logging methods
 # that can be called directly by the user (although the standard approach would
 # be to import them in the caller’s namespace). These methods are slower because
 # They need to retrieve a logger each time.
-for my $name (logging_methods()) {
+for my $name (@ALL_LOG_METHODS) {
   no strict 'refs';  ## no critic (ProhibitNoStrict)
-  *{$name} = sub {
-    my @caller = caller(0);
-    my $hint_hash = $caller[$HINT_HASH];
-    my $logger = _get_singleton_logger($caller[0], $hint_hash);
-    my $method = $name.'f';
-    my $msg = $logger->$method(@_);
-    _die(_get_category($caller[0], $hint_hash), $msg) if _should_die($name, $hint_hash);
-  };
+  *{$name} = set_subname(
+    $name,
+    sub {
+      my @caller = caller(0);
+      my $hint_hash = $caller[$HINT_HASH];
+      my $logger = _get_singleton_logger($caller[0], $hint_hash);
+      my $method = $name.'f';
+      my $msg = $logger->$method(@_);
+      _die(_get_category($caller[0], $hint_hash), $msg) if _should_die($name, $hint_hash);
+    });
 }
 
 1;
@@ -310,13 +341,136 @@ statements.
 
 =head2 Importing
 
-=head2 Logging
+You can pass the following parameters on the C<use Log::Any::Simple> line:
+
+=over 4
+
+=item B<:default> will export the following names in your namespace: C<trace>,
+C<debug>, C<info>, C<warning>, C<error>, and C<fatal>.
+
+=item B<:all> will export logging methods for all the log levels supported by
+B<Log::Any> as well as for all their aliases.
+
+=item C<B<:die_at> => I<level_name>> specifies the lowest logging level that
+triggers a call to die() when used. By default this is C<fatal> (and so, the
+C<critical>, C<alert>, and C<emergency> levels also dies). You can also pass
+C<none> to disable this behavior entirely.
+
+=item C<B<:category> => I<category_name>> specifies the logging category to use.
+If not specified, this defaults to your package name.
+
+=item C<B<:prefix> => I<prefix_value>> sets a C<prefix> that is prepended to
+all logging messages. This is handled by directly passing this value to the
+L<Log::Any::Proxy> object used internally.
+
+=item B<:dump_long> will use a multi-line layout for rendering complex
+data-structures that are logged.
+
+=item B<:dump_short> will use a compact single-line layout for rendering complex
+data-structures that are logged. This is the default.
+
+=back
+
+In addition to these options, you can pass the names of any of the valid level
+or alias as documented at L<Log::Any/"LOG LEVELS"> to import just these methods
+and you can pass the name of B<Log::Any::Simple> public methods to import them
+as well, as is standard.
+
+If you do not import the logging methods into your package, you can still call
+them directly from the B<Log::Any::Simple> namespace, but this is slightly less
+efficient than importing them.
+
+=head2 Logging methods
+
+While we use the default level names for our methods (C<info>, C<error>, etc.),
+they behave more like the C<f> variant of the L<Log::Any/Logging> methods. That
+is, they expect any number of arguments where the first argument is a format
+string following the L<C<sprintf>|https://perldoc.perl.org/functions/sprintf>
+syntax and the rest are the arguments for the C<sprintf> call.
+
+In addition to the normal behavior the following values can be passed in the
+list of arguments (except in the first position):
+
+=over 4
+
+=item *
+
+A code reference, which will be called if the logging actually happens. This is
+useful when you want to log large or costly data-structures to avoid generating
+them if detailed logging is not activated by the application.
+
+=item *
+
+Any other data reference, which will be dumped through L<Data::Dumper>. The
+formatting being used can be controlled through the B<:dump_short> and
+B<:dump_long> arguments passed on the C<use Log::Any::Simple> line.
+
+Note that you can use a code reference that returns a data-reference and the
+data will be generated and dumped lazily (in all cases, it will be dumped
+lazily even if not returned by a code reference).
+
+=item *
+
+An I<undef> value, which will be rendered as C<< <undef> >>.
+
+=back
+
+Although this should be uncommon, you can call the get_logger() method (which
+can be imported) to retrieve the underlying L<Log::Any> logger being used
+internally for your package. But note that using this object bypass all the
+specific behavior of B<Log::Any::Simple>. One use of this object is to call the
+is_xxx() method family, indicating whether a given log level is activated.
+However, thanks to the lazy-logging behavior of our module, the need for that
+should be infrequent.
 
 =head2 Controlling stack-traces
 
+You can use the die_with_stack_trace() method (that can be imported) to control
+the amount of stack-trace printed when the library dies following a call to a
+logging method above the B<:die_at> level. This is meant to be called by the
+application consuming the logs, rather than by the module producing them
+(although this is possible too).
+
+This method can be called in two ways:
+
+  die_with_stack_trace($category => $mode);
+  die_with_stack_trace($mode);
+
+The first syntax sets a stack-trace mode for a specific logging category (by
+default the package name from which you log) and the second sets a fallback mode
+for categories for which you didn’t set a specific mode.
+
+The valid values for B<$mode> are the following:
+
+=over 4
+
+=item *
+
+B<none>: no stack trace is printed at all, just the log message that goes to
+STDERR, in addition to the default logging destination.
+
+=item *
+
+B<short>: a short stack trace is printed, with just the name of the calling
+method (similar to the default behavior of die()).
+
+=item *
+
+B<long>: a long stack trace is printed, with all the chain of the calling
+methods (similar to the behavior of croak()).
+
+=item *
+
+I<undef>: delete the global or per-category setting for the stack trace mode.
+
+=back
+
+When neither a global nor a per-category mode is set, the default is B<short>.
+
 =head1 RESTRICTIONS
 
-TODO: It is not possible to import the module more than once in a given package.
+Importing this module more than once in a given package is not supported and can
+give unpredictable results.
 
 =head1 AUTHOR
 

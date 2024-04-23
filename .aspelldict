@@ -1,14 +1,16 @@
-personal_ws-1.1 en 22 
+personal_ws-1.1 en 27 
 ErrorHandling
 Kende
 MERCHANTABILITY
 NONINFRINGEMENT
 ProhibitCascadingIfElse
 ProhibitEmptyQuotes
+ProhibitExcessComplexity
 ProhibitMagicNumbers
 ProhibitNoStrict
 RequireArgUnpacking
 RequireCarping
+STDERR
 SlightlySimpler
 TODO
 Useqq
@@ -17,7 +19,10 @@ args
 backtrace
 longmess
 namespace
+prepended
 shortmess
+sprintf
 sublicense
+subname
 undef
 utf

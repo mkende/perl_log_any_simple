@@ -35,4 +35,10 @@ package MyTest4 {
   $::log->clear();
 }
 
+package MyTest1 {
+  my @methods = qw(die_with_stack_trace get_logger);
+  use Log::Any::Simple @methods;
+  ::imported_ok(@methods);
+}
+
 done_testing;
