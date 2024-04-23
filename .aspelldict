@@ -1,8 +1,23 @@
-personal_ws-1.1 en 7 
+personal_ws-1.1 en 22 
+ErrorHandling
+Kende
+MERCHANTABILITY
+NONINFRINGEMENT
 ProhibitCascadingIfElse
+ProhibitEmptyQuotes
+ProhibitMagicNumbers
 ProhibitNoStrict
 RequireArgUnpacking
+RequireCarping
+SlightlySimpler
 TODO
+Useqq
 arg
+args
 backtrace
+longmess
 namespace
+shortmess
+sublicense
+undef
+utf

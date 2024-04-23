@@ -19,14 +19,14 @@ package MyTest2 {
 package MyTest3 {
   use Log::Any::Simple ':dump_long';
   Log::Any::Simple::info('foo %s', ['bar']);
-  ::is($::log->msgs(), [{category => 'MyTest3', level => 'info', message => "foo     [\n      'bar'\n    ]\n"}], 'long dump');
+  ::is($::log->msgs(), [{category => 'MyTest3', level => 'info', message => "foo     [\n      'bar'\n    ]"}], 'long dump');
   $::log->clear();
 }
 
 package MyTest4 {
   use Log::Any::Simple ':default', ':dump_long';
   info('foo %s', ['bar']);
-  ::is($::log->msgs(), [{category => 'MyTest4', level => 'info', message => "foo     [\n      'bar'\n    ]\n"}], 'long dump imported');
+  ::is($::log->msgs(), [{category => 'MyTest4', level => 'info', message => "foo     [\n      'bar'\n    ]"}], 'long dump imported');
   $::log->clear();
 }
 
