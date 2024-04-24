@@ -6,8 +6,8 @@ package MyTest1 {
   use Log::Any::Simple ':default';
   info('foo %s baz', 'bar');
   ::is($::log->msgs(), [{category => 'MyTest1', level => 'info', message => 'foo bar baz'}], 'log info default import');
-  ::imported_ok(qw(trace debug info warn error fatal));
-  ::not_imported_ok(qw(inform warning err crit critical alert emergency));
+  ::imported_ok(qw(trace debug info warning error fatal));
+  ::not_imported_ok(qw(inform warn err crit critical alert emergency));
   $::log->clear();
 }
 
@@ -15,16 +15,16 @@ package MyTest2 {
   use Log::Any::Simple ':all';
   info('foo %s baz', 'bar');
   ::is($::log->msgs(), [{category => 'MyTest2', level => 'info', message => 'foo bar baz'}], 'log info default import');
-  ::imported_ok(qw(trace debug info warn error fatal));
-  ::imported_ok(qw(inform warning err crit critical alert emergency));
+  ::imported_ok(qw(trace debug info warning error fatal));
+  ::imported_ok(qw(inform warn err crit critical alert emergency));
   $::log->clear();
 }
 
 package MyTest3 {
   use Log::Any::Simple 'debug', 'crit';
   ::imported_ok(qw(debug crit));
-  ::not_imported_ok(qw(trace info warn error fatal));
-  ::not_imported_ok(qw(inform warning err critical alert emergency));
+  ::not_imported_ok(qw(trace info warning error fatal));
+  ::not_imported_ok(qw(inform warn err critical alert emergency));
   $::log->clear();
 }
 
@@ -35,10 +35,9 @@ package MyTest4 {
   $::log->clear();
 }
 
-package MyTest1 {
-  my @methods = qw(die_with_stack_trace get_logger);
-  use Log::Any::Simple @methods;
-  ::imported_ok(@methods);
+package MyTest5 {
+  use Log::Any::Simple qw(die_with_stack_trace get_logger);
+  ::imported_ok(qw(die_with_stack_trace get_logger));
 }
 
 done_testing;
