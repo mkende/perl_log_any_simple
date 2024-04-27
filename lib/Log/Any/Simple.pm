@@ -345,28 +345,42 @@ You can pass the following parameters on the C<use Log::Any::Simple> line:
 
 =over 4
 
-=item B<:default> will export the following names in your namespace: C<trace>,
+=item *
+
+B<:default> will export the following names in your namespace: C<trace>,
 C<debug>, C<info>, C<warning>, C<error>, and C<fatal>.
 
-=item B<:all> will export logging methods for all the log levels supported by
+=item *
+
+B<:all> will export logging methods for all the log levels supported by
 B<Log::Any> as well as for all their aliases.
 
-=item C<B<:die_at> => I<level_name>> specifies the lowest logging level that
+=item *
+
+C<B<:die_at> => I<level_name>> specifies the lowest logging level that
 triggers a call to die() when used. By default this is C<fatal> (and so, the
 C<critical>, C<alert>, and C<emergency> levels also dies). You can also pass
 C<none> to disable this behavior entirely.
 
-=item C<B<:category> => I<category_name>> specifies the logging category to use.
+=item *
+
+C<B<:category> => I<category_name>> specifies the logging category to use.
 If not specified, this defaults to your package name.
 
-=item C<B<:prefix> => I<prefix_value>> sets a C<prefix> that is prepended to
+=item *
+
+C<B<:prefix> => I<prefix_value>> sets a C<prefix> that is prepended to
 all logging messages. This is handled by directly passing this value to the
 L<Log::Any::Proxy> object used internally.
 
-=item B<:dump_long> will use a multi-line layout for rendering complex
+=item *
+
+B<:dump_long> will use a multi-line layout for rendering complex
 data-structures that are logged.
 
-=item B<:dump_short> will use a compact single-line layout for rendering complex
+=item *
+
+B<:dump_short> will use a compact single-line layout for rendering complex
 data-structures that are logged. This is the default.
 
 =back
