@@ -1,4 +1,4 @@
-personal_ws-1.1 en 27 
+personal_ws-1.1 en 34 
 ErrorHandling
 Kende
 MERCHANTABILITY
@@ -16,12 +16,19 @@ TODO
 Useqq
 arg
 args
+argv
 backtrace
+cmd
+fh
 longmess
 namespace
 prepended
 shortmess
 sprintf
+stderr
+stdout
+sterr
+str
 sublicense
 subname
 undef

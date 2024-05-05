@@ -12,7 +12,7 @@ use Log::Any::Adapter;
 use Readonly;
 use Sub::Util 'set_subname';
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 Readonly::Scalar my $DIE_AT_DEFAULT => numeric_level('fatal');
 Readonly::Scalar my $DIE_AT_KEY => 'Log::Any::Simple/die_at';
@@ -287,24 +287,27 @@ sub _activate_logging {
   my $log_from = numeric_level($level_str);
   my $numeric_debug = numeric_level('debug');
   croak "Invalid ${cmd_arg_name} level" unless defined $log_from;
-  Log::Any::Adapter->set('Capture', format => 'messages', to => sub {
-    my ($level, $category, $text) = @_;
-    my $num_level = numeric_level($level);
-    return if $num_level > $log_from;
-    if ($num_level >= $numeric_debug) {
-      chomp($text);
-      printf $fh "%s(%s) - %s\n", (uc $level), $category, $text;
-    } else {
-      chomp($text);
-      printf $fh "%s - %s\n", (uc $level), $text;
-    }
-  });
+  Log::Any::Adapter->set(
+    'Capture',
+    format => 'messages',
+    to => sub {
+      my ($level, $category, $text) = @_;
+      my $num_level = numeric_level($level);
+      return if $num_level > $log_from;
+      if ($num_level >= $numeric_debug) {
+        chomp($text);
+        printf $fh "%s(%s) - %s\n", (uc $level), $category, $text;
+      } else {
+        chomp($text);
+        printf $fh "%s - %s\n", (uc $level), $text;
+      }
+    });
   return;
 }
 
 # Parses @ARGV and activate logging if there is a --log argument in it.
 sub _parse_argv {
-  for (my $i = 0; $i <= $#ARGV; $i++) {
+  for my $i (0 .. $#ARGV) {
     last if $ARGV[$i] eq '--';
     next unless $ARGV[$i] =~ m/^--?log(?:=(.*))?$/;
     last if $i == $#ARGV && !defined $1;
