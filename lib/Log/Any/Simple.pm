@@ -8,6 +8,7 @@ use Carp qw(croak cluck shortmess longmess);
 use Data::Dumper;
 use Log::Any;
 use Log::Any::Adapter::Util 'numeric_level';
+use Log::Any::Adapter;
 use Readonly;
 use Sub::Util 'set_subname';
 
@@ -69,6 +70,12 @@ sub import {  ## no critic (RequireArgUnpacking, ProhibitExcessComplexity)
       $^H{$DUMP_KEY} = 'short';
     } elsif (exists $EXPORT_OK{$arg}) {
       _export_module_method($arg, $calling_pkg_name);
+    } elsif ($arg eq ':to_stderr') {
+      _activate_logging($arg, \*STDERR, shift);
+    } elsif ($arg eq ':to_stdout') {
+      _activate_logging($arg, \*STDOUT, shift);
+    } elsif ($arg eq ':from_argv') {
+      _parse_argv();
     } else {
       croak "Unknown parameter: $arg";
     }
@@ -272,6 +279,49 @@ for my $name (@ALL_LOG_METHODS) {
     });
 }
 
+# Creates a Log::Any::Adapter that logs to the given file descriptor ($fh)
+# starting at the given $level_str. $cmd_arg_name is used only for debugging and
+# is the name of the "use" statement option that triggered this call.
+sub _activate_logging {
+  my ($cmd_arg_name, $fh, $level_str) = @_;
+  my $log_from = numeric_level($level_str);
+  my $numeric_debug = numeric_level('debug');
+  croak "Invalid ${cmd_arg_name} level" unless defined $log_from;
+  Log::Any::Adapter->set('Capture', format => 'messages', to => sub {
+    my ($level, $category, $text) = @_;
+    my $num_level = numeric_level($level);
+    return if $num_level > $log_from;
+    if ($num_level >= $numeric_debug) {
+      chomp($text);
+      printf $fh "%s(%s) - %s\n", (uc $level), $category, $text;
+    } else {
+      chomp($text);
+      printf $fh "%s - %s\n", (uc $level), $text;
+    }
+  });
+  return;
+}
+
+# Parses @ARGV and activate logging if there is a --log argument in it.
+sub _parse_argv {
+  for (my $i = 0; $i <= $#ARGV; $i++) {
+    last if $ARGV[$i] eq '--';
+    next unless $ARGV[$i] =~ m/^--?log(?:=(.*))?$/;
+    last if $i == $#ARGV && !defined $1;
+    my $cmd;
+    if (defined $1) {
+      $cmd = $1;
+      splice @ARGV, $i, 1;
+    } else {
+      $cmd = $ARGV[$i + 1];
+      splice @ARGV, $i, 2;
+    }
+    _activate_logging(':from_argv', \*STDERR, $cmd);
+    last;
+  }
+  return;
+}
+
 1;
 
 __END__
@@ -322,6 +372,14 @@ B<fatal> level and above, but this can be configured).
 
 The consumer application can control the amount of stack-trace produced when a
 module dies with B<Log::Any::Simple>.
+
+=item *
+
+Options to trivially control the log output, for simple programs or for tests.
+
+=item *
+
+Support for a simple command line based log output.
 
 =item *
 
@@ -382,6 +440,32 @@ data-structures that are logged.
 
 B<:dump_short> will use a compact single-line layout for rendering complex
 data-structures that are logged. This is the default.
+
+=item *
+
+C<B<:to_sterr> => I<level_name>> Activate logging for messages at the given
+level or above. All logs messages are prefixed with their level name and sent to
+STDERR. In general this is meant for tests or very simple programs.
+
+Note that this option has a global effect on the program and cannot be turned
+off.
+
+=item *
+
+C<B<:to_stdout> => I<level_name>> is the same as B<:to_stderr> but sending the
+messages to STDOUT instead of STDERR.
+
+=item *
+
+B<:from_argv> parses C<@ARGV> and activates logging based on its content. For
+now this is not configurable and will look for a single C<--log> argument in the
+command line, that can take only a single log level as argument (either as two
+consecutive command line arguments or as C<--log=level>). If found, log messages
+at that level or above will be sent to STDERR. The parsed arguments are removed
+from C<@ARGV>.
+
+Note that this option has a global effect on the program and cannot be turned
+off.
 
 =back
 
