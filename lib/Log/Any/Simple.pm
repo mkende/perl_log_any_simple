@@ -12,7 +12,7 @@ use Log::Any::Adapter;
 use Readonly;
 use Sub::Util 'set_subname';
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 Readonly::Scalar my $DIE_AT_DEFAULT => numeric_level('fatal');
 Readonly::Scalar my $DIE_AT_KEY => 'Log::Any::Simple/die_at';
@@ -88,6 +88,21 @@ sub import {  ## no critic (RequireArgUnpacking, ProhibitExcessComplexity)
 
   @_ = 'Log::Any';
   goto &Log::Any::import;
+}
+
+# Unimport is not documented at all, and only here to facilitate testing.
+sub unimport {  ## no critic (RequireArgUnpacking)
+  my (undef) = shift @_;  # This is the package being imported, so our self.
+
+  while (defined (my $arg = shift)) {
+    if ($arg eq ':logging') {
+      _deactivate_logging();
+    } else {
+      croak "Unknown parameter: $arg";
+    }
+  }
+
+  return;
 }
 
 # This is slightly ugly but the intent is that the user of a module using this
@@ -279,6 +294,9 @@ for my $name (@ALL_LOG_METHODS) {
     });
 }
 
+# The list of all Log::Any::Adapter objects set by this module.
+my @set_adapters;
+
 # Creates a Log::Any::Adapter that logs to the given file descriptor ($fh)
 # starting at the given $level_str. $cmd_arg_name is used only for debugging and
 # is the name of the "use" statement option that triggered this call.
@@ -287,7 +305,7 @@ sub _activate_logging {
   my $log_from = numeric_level($level_str);
   my $numeric_debug = numeric_level('debug');
   croak "Invalid ${cmd_arg_name} level" unless defined $log_from;
-  Log::Any::Adapter->set(
+  my $adapter = Log::Any::Adapter->set(
     'Capture',
     format => 'messages',
     to => sub {
@@ -302,6 +320,13 @@ sub _activate_logging {
         printf $fh "%s - %s\n", (uc $level), $text;
       }
     });
+  push @set_adapters, $adapter;
+  return;
+}
+
+# Removes all the Log::Any::Adapter objects set by _activate_logging
+sub _deactivate_logging {
+  Log::Any::Adapter->remove($_) for splice @set_adapters;
   return;
 }
 
@@ -408,67 +433,63 @@ You can pass the following parameters on the C<use Log::Any::Simple> line:
 
 =item *
 
-B<:default> will export the following names in your namespace: C<trace>,
+C<B<:default>> will export the following names in your namespace: C<trace>,
 C<debug>, C<info>, C<warning>, C<error>, and C<fatal>.
 
 =item *
 
-B<:all> will export logging methods for all the log levels supported by
+C<B<:all>> will export logging methods for all the log levels supported by
 B<Log::Any> as well as for all their aliases.
 
 =item *
 
-C<B<:die_at> => I<level_name>> specifies the lowest logging level that
+C<B<:die_at> =E<gt> I<level_name>> specifies the lowest logging level that
 triggers a call to die() when used. By default this is C<fatal> (and so, the
 C<critical>, C<alert>, and C<emergency> levels also dies). You can also pass
 C<none> to disable this behavior entirely.
 
 =item *
 
-C<B<:category> => I<category_name>> specifies the logging category to use.
+C<B<:category> =E<gt> I<category_name>> specifies the logging category to use.
 If not specified, this defaults to your package name.
 
 =item *
 
-C<B<:prefix> => I<prefix_value>> sets a C<prefix> that is prepended to
+C<B<:prefix> =E<gt> I<prefix_value>> sets a I<prefix> that is prepended to
 all logging messages. This is handled by directly passing this value to the
 L<Log::Any::Proxy> object used internally.
 
 =item *
 
-B<:dump_long> will use a multi-line layout for rendering complex
+C<B<:dump_long>> will use a multi-line layout for rendering complex
 data-structures that are logged.
 
 =item *
 
-B<:dump_short> will use a compact single-line layout for rendering complex
+C<B<:dump_short>> will use a compact single-line layout for rendering complex
 data-structures that are logged. This is the default.
 
 =item *
 
-C<B<:to_sterr> => I<level_name>> Activate logging for messages at the given
+C<B<:to_stderr> =E<gt> I<level_name>> Activate logging for messages at the given
 level or above. All logs messages are prefixed with their level name and sent to
-STDERR. In general this is meant for tests or very simple programs.
-
-Note that this option has a global effect on the program and cannot be turned
-off.
+STDERR. In general this is meant for tests or very simple programs. Note that
+this option has a global effect on the program and cannot be turned off.
 
 =item *
 
-C<B<:to_stdout> => I<level_name>> is the same as B<:to_stderr> but sending the
-messages to STDOUT instead of STDERR.
+C<B<:to_stdout> =E<gt> I<level_name>> is the same as C<B<:to_stderr>> but
+sending the messages to STDOUT instead of STDERR.
 
 =item *
 
-B<:from_argv> parses C<@ARGV> and activates logging based on its content. For
+C<B<:from_argv>> parses C<@ARGV> and activates logging based on its content. For
 now this is not configurable and will look for a single C<--log> argument in the
 command line, that can take only a single log level as argument (either as two
 consecutive command line arguments or as C<--log=level>). If found, log messages
 at that level or above will be sent to STDERR. The parsed arguments are removed
-from C<@ARGV>.
-
-Note that this option has a global effect on the program and cannot be turned
-off.
+from C<@ARGV>. Note that this option has a global effect on the program and
+cannot be turned off.
 
 =back
 
@@ -503,12 +524,11 @@ them if detailed logging is not activated by the application.
 =item *
 
 Any other data reference, which will be dumped through L<Data::Dumper>. The
-formatting being used can be controlled through the B<:dump_short> and
-B<:dump_long> arguments passed on the C<use Log::Any::Simple> line.
-
-Note that you can use a code reference that returns a data-reference and the
-data will be generated and dumped lazily (in all cases, it will be dumped
-lazily even if not returned by a code reference).
+formatting being used can be controlled through the C<B<:dump_short>> and
+C<B<:dump_long>> arguments passed on the C<use Log::Any::Simple> line. Note that
+you can use a code reference that returns a data-reference and the data will be
+generated and dumped lazily (in all cases, it will be dumped lazily even if not
+returned by a code reference).
 
 =item *
 
@@ -547,26 +567,27 @@ The valid values for B<$mode> are the following:
 
 =item *
 
-B<none>: no stack trace is printed at all, just the log message that goes to
+C<B<none>>: no stack trace is printed at all, just the log message that goes to
 STDERR, in addition to the default logging destination.
 
 =item *
 
-B<short>: a short stack trace is printed, with just the name of the calling
+C<B<short>>: a short stack trace is printed, with just the name of the calling
 method (similar to the default behavior of die()).
 
 =item *
 
-B<long>: a long stack trace is printed, with all the chain of the calling
+C<B<long>>: a long stack trace is printed, with all the chain of the calling
 methods (similar to the behavior of croak()).
 
 =item *
 
-I<undef>: delete the global or per-category setting for the stack trace mode.
+C<I<undef>>: delete the global or per-category setting for the stack trace mode.
 
 =back
 
-When neither a global nor a per-category mode is set, the default is B<short>.
+When neither a global nor a per-category mode is set, the default is
+C<B<short>>.
 
 =head1 RESTRICTIONS
 
